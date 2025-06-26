@@ -39,4 +39,48 @@
         }
         iframe {
             width: 100%;
-            height: 5
+            height: 500px;
+            border: none;
+        }
+        footer {
+            background-color: #004080;
+            color: white;
+            text-align: center;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Geo Portal UTPL</h1>
+        <p>Áreas Protegidas del Ecuador</p>
+    </header>
+    <nav>
+        <a href="#info">Información</a>
+        <a href="#mapa">Mapa Interactivo</a>
+        <a href="#recursos">Recursos</a>
+    </nav>
+    <main>
+        <section id="info">
+            <h2>¿Qué son las Áreas Protegidas?</h2>
+            <p>Las áreas protegidas del Ecuador son espacios naturales designados para la conservación de la biodiversidad, los recursos naturales y los valores culturales. Forman parte del Sistema Nacional de Áreas Protegidas (SNAP) y están categorizadas según su nivel de protección y uso permitido.</p>
+        </section>
+        <section id="mapa">
+            <h2>Mapa Interactivo</h2>
+            <p>A continuación se muestra un visor de mapas con la ubicación de las áreas protegidas en el Ecuador:</p>
+            <iframe src="https://www.arcgis.com/apps/mapviewer/index.html?webmap=fdd6b5b9635e4f19a9b6f96f68041f52"></iframe>
+        </section>
+        <section id="recursos">
+            <h2>Recursos y Documentación</h2>
+            <ul>
+                <li><a href="https://www.ambiente.gob.ec/areas-naturales-protegidas/" target="_blank">Ministerio del Ambiente - SNAP</a></li>
+                <li><a href="https://datosabiertos.ambiente.gob.ec/" target="_blank">Datos Abiertos del MAATE</a></li>
+                <li><a href="https://protectedplanet.net/" target="_blank">Protected Planet (WDPA)</a></li>
+            </ul>
+        </section>
+    </main>
+    <footer>
+        <p>© 2025 Universidad Técnica Particular de Loja - Proyecto Geo Portal UTPL</p>
+    </footer>
+</body>
+</html>
