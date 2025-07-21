@@ -1,86 +1,614 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geo Portal UTPL - Áreas Protegidas del Ecuador</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #eef2f3;
-            margin: 0;
-            padding: 0;
-        }
-        header {
-            background-color: #004080;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        nav {
-            background-color: #03396c;
-            padding: 10px;
-            text-align: center;
-        }
-        nav a {
-            color: white;
-            margin: 0 15px;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        nav a:hover {
-            text-decoration: underline;
-        }
-        main {
-            padding: 20px;
-        }
-        section {
-            margin-bottom: 40px;
-        }
-        iframe {
-            width: 100%;
-            height: 500px;
-            border: none;
-        }
-        footer {
-            background-color: #004080;
-            color: white;
-            text-align: center;
-            padding: 10px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Geovisor Supabase con filtros y búsqueda por radio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  
+  <!-- DataTables CSS y JS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+    #app { flex: 1; display: flex; flex-direction: column; height: 100%; }
+    header { background-color: #1f78b4; color: white; padding: 15px; text-align: center; font-size: 1.8rem; font-weight: bold; flex-shrink: 0; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+    #headerTitle { flex-grow: 1; }
+    #btnRedirect { background-color: #ffffff; color: #1f78b4; padding: 8px 16px; border: none; border-radius: 4px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
+    #btnRedirect:hover { background-color: #f0f0f0; }
+    
+    /* Estilos para modal/overlay de segunda página */
+    #modalOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); z-index: 10000; display: none; }
+    #modalContent { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; height: 90%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    #modalHeader { background-color: #1f78b4; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+    #modalBody { padding: 20px; height: calc(100% - 80px); overflow-y: auto; display: flex; }
+    
+    /* Estilos para la funcionalidad de tablas en el modal */
+    #modalSidebar { width: 200px; min-width: 200px; border-radius: 8px; background: #2c3e50; color: #ecf0f1; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.5rem; overflow-y: auto; box-shadow: 2px 0 6px rgba(0,0,0,0.2); font-size: 0.85rem; user-select: none; margin-right: 1rem; }
+    #modalSidebar .tab { padding: 0.5rem 1rem; cursor: pointer; background: #34495e; border-radius: 5px; border: 1px solid transparent; transition: background-color 0.3s ease, color 0.3s ease; }
+    #modalSidebar .tab:hover { background: #1abc9c; color: #1a1a1a; }
+    #modalSidebar .tab.active { background: #16a085; font-weight: bold; border-color: #0e6655; box-shadow: inset 2px 0 8px rgba(0,0,0,0.3); color: #ecf0f1; }
+    #modalMain { flex-grow: 1; display: flex; flex-direction: column; }
+    #modalFiltros { margin-bottom: 1rem; }
+    #modalFiltros label { font-weight: bold; margin-right: 1rem; }
+    #modalFiltros select { margin-right: 2rem; }
+    #modalTabContent { flex-grow: 1; overflow: auto; border: 1px solid #ccc; border-radius: 5px; padding: 1rem; background: white; }
+    table.dataTable { width: 100% !important; }
+    #closeModal { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+    #closeModal:hover { background-color: rgba(255,255,255,0.2); border-radius: 4px; }
+    
+    #content { flex: 1; display: flex; height: calc(100% - 60px); overflow: hidden; }
+    #sidebar { width: 340px; background: #f8f8f8; padding: 15px; box-sizing: border-box; overflow-y: auto; border-right: 1px solid #ccc; display: flex; flex-direction: column; }
+    #filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; flex-shrink: 0; }
+    select, button { padding: 8px; font-size: 1rem; border: 1px solid #ccc; border-radius: 4px; user-select: none; }
+    button { cursor: pointer; background: white; }
+    #results { flex-grow: 1; overflow-y: auto; background: white; border: 1px solid #ccc; padding: 10px; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 4px; }
+    #results h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    #results ul { list-style: none; padding-left: 0; margin: 0; }
+    #results li { cursor: pointer; margin-bottom: 6px; padding: 6px 8px; border-radius: 3px; transition: background-color 0.2s; user-select: none; }
+    #results li:hover { background-color: #e0e0e0; }
+    #map { flex-grow: 1; height: 100%; }
+  </style>
 </head>
 <body>
+  <div id="app">
     <header>
-        <h1>Geo Portal UTPL</h1>
-        <p>Áreas Protegidas del Ecuador</p>
+      <div id="headerTitle">Geovisor</div>
+      <button id="btnRedirect" onclick="abrirSegundaPagina()">Descargar datos</button>
     </header>
-    <nav>
-        <a href="#info">Información</a>
-        <a href="#mapa">Mapa Interactivo</a>
-        <a href="#recursos">Recursos</a>
-    </nav>
-    <main>
-        <section id="info">
-            <h2>¿Qué son las Áreas Protegidas?</h2>
-            <p>Las áreas protegidas del Ecuador son espacios naturales designados para la conservación de la biodiversidad, los recursos naturales y los valores culturales. Forman parte del Sistema Nacional de Áreas Protegidas (SNAP) y están categorizadas según su nivel de protección y uso permitido.</p>
-        </section>
-        <section id="mapa">
-            <h2>Mapa Interactivo</h2>
-            <p>A continuación se muestra un visor de mapas con la ubicación de las áreas protegidas en el Ecuador:</p>
-            <iframe src="https://www.arcgis.com/apps/mapviewer/index.html?webmap=fdd6b5b9635e4f19a9b6f96f68041f52"></iframe>
-        </section>
-        <section id="recursos">
-            <h2>Recursos y Documentación</h2>
-            <ul>
-                <li><a href="https://www.ambiente.gob.ec/areas-naturales-protegidas/" target="_blank">Ministerio del Ambiente - SNAP</a></li>
-                <li><a href="https://datosabiertos.ambiente.gob.ec/" target="_blank">Datos Abiertos del MAATE</a></li>
-                <li><a href="https://protectedplanet.net/" target="_blank">Protected Planet (WDPA)</a></li>
-            </ul>
-        </section>
-    </main>
-    <footer>
-        <p>© 2025 Universidad Técnica Particular de Loja - Proyecto Geo Portal UTPL</p>
-    </footer>
+    <div id="content">
+      <aside id="sidebar">
+        <div id="filters">
+          <label for="tableSelect"><strong>Selecciona tabla (capa):</strong></label>
+          <select id="tableSelect"></select>
+          <label for="fieldSelect"><strong>Selecciona campo para filtrar:</strong></label>
+          <select id="fieldSelect" disabled></select>
+          <label for="valueSelect"><strong>Selecciona valor:</strong></label>
+          <select id="valueSelect" disabled></select>
+          <button id="btnSearch" disabled>Buscar</button>
+          <button id="btnClear">Limpiar filtro</button>
+        </div>
+        <div id="results" style="display:none;">
+          <h3>Resultados</h3>
+          <ul id="resultList"></ul>
+        </div>
+      </aside>
+      <main id="map"></main>
+    </div>
+  </div>
+
+  <!-- Modal/Overlay para segunda página -->
+  <div id="modalOverlay">
+    <div id="modalContent">
+      <div id="modalHeader">
+        <h2>Segunda Página - Panel de Control</h2>
+        <button id="closeModal" onclick="cerrarSegundaPagina()">&times;</button>
+      </div>
+      <div id="modalBody">
+        <div id="modalSidebar"></div>
+        <div id="modalMain">
+          <h3>Descargar Datos - Tablas Supabase</h3>
+          <div id="modalFiltros">
+            <label for="modalProvincia">Provincia:</label>
+            <select id="modalProvincia"><option value="">Todas</option></select>
+
+            <label for="modalCanton">Cantón:</label>
+            <select id="modalCanton"><option value="">Todos</option></select>
+          </div>
+          <div id="modalTabContent">
+            <!-- Aquí se cargan las tablas -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+    const supabase = createClient('https://kaoxzvfdlykegcfhoohg.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imthb3h6dmZkbHlrZWdjZmhvb2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5NTQ5MTEsImV4cCI6MjA2ODUzMDkxMX0.Y3MutpScHy3IyNSQev3u247Ec5l1hYTTmPRZqTZBY-k')
+
+    const map = L.map('map').setView([-1.5, -78.5], 7)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map)
+
+    const capas = {}, capasOriginales = {}
+    const controlCapas = L.control.layers(null, null, { collapsed: false }).addTo(map)
+
+    const tablas = {
+      'vista_poblados_geojson': { nombre: 'Poblados', camposPopup: ['nam', 'descripcio', 'ppt_desc'], color: '#1f78b4', camposFiltro: ['nam', 'descripcio', 'ppt_desc'] },
+      'vista_sequia_geojson': { nombre: 'Susceptibilidad a Sequía', camposPopup: ['descripcio', 'susc_sequi'], color: '#33a02c', camposFiltro: ['descripcio', 'susc_sequi'] },
+      'vista_cantones_geojson': { nombre: 'Cantones', camposPopup: ['DPA_DESCAN', 'DPA_DESPRO'], color: '#e31a1c', camposFiltro: ['DPA_DESCAN', 'DPA_DESPRO'] },
+      'vista_siniestros_geojson': { nombre: 'Siniestros 2018', camposPopup: ['Incidente', 'Canton', 'Parroquia', 'Subcatogor'], color: '#ff7f00', camposFiltro: ['Incidente', 'Canton', 'Parroquia', 'Subcatogor'] },
+      'vista_parroquias_geojson': { nombre: 'Parroquias', camposPopup: ['DPA_DESPAR', 'DPA_DESCAN', 'DPA_DESPRO'], color: '#6a3d9a', camposFiltro: ['DPA_DESPAR', 'DPA_DESCAN', 'DPA_DESPRO'] },
+      'vista_riesgos_geojson': { nombre: 'Riesgos 2018', camposPopup: ['Incidente', 'Canton', 'Parroquia', 'Sector'], color: '#b15928', camposFiltro: ['Incidente', 'Canton', 'Parroquia', 'Sector'] },
+      'vista_mov_masas_geojson': { nombre: 'Movimientos en Masa', camposPopup: ['DESCRIPCIO', 'Area_ha'], color: '#a6cee3', camposFiltro: ['DESCRIPCIO', 'Area_ha'] },
+      'vista_sismicidad_geojson': { nombre: 'Intensidad Sísmica', camposPopup: ['CODIGO', 'DESCRIPCIO'], color: '#fb9a99', camposFiltro: ['CODIGO', 'DESCRIPCIO'] }
+    }
+
+    const inputTable = document.getElementById('tableSelect')
+    const inputField = document.getElementById('fieldSelect')
+    const inputValue = document.getElementById('valueSelect')
+    const btnSearch = document.getElementById('btnSearch')
+    const btnClear = document.getElementById('btnClear')
+    const resultsDiv = document.getElementById('results')
+    const resultList = document.getElementById('resultList')
+
+    // Variable para el marcador de selección
+    let marcadorSeleccion = null
+
+    async function cargarCapa(vista, nombreCapa, camposPopup, color) {
+      try {
+        const { data } = await supabase.from(vista).select('*')
+        const geojson = { type: 'FeatureCollection', features: data.map((row) => ({ type: 'Feature', geometry: row.geometry, properties: row })) }
+        capasOriginales[nombreCapa] = geojson
+        const layer = L.geoJSON(geojson, {
+          pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 6, fillColor: color, color: '#000', weight: 1, fillOpacity: 0.7 }),
+          style: () => ({ color, weight: 2, fillOpacity: 0.5 }),
+          onEachFeature: (feature, layer) => {
+            let popupContent = `<strong>${nombreCapa}</strong><br/>`
+            camposPopup.forEach((campo) => { if (feature.properties[campo]) popupContent += `<strong>${campo}:</strong> ${feature.properties[campo]}<br/>` })
+            layer.bindPopup(popupContent)
+          }
+        })
+        capas[nombreCapa] = layer
+        layer.addTo(map)
+        controlCapas.addOverlay(layer, nombreCapa)
+      } catch (error) {
+        console.error('Error cargando capa:', error)
+      }
+    }
+
+    async function cargarTodasLasCapas() {
+      const promesas = []
+      for (const [vista, config] of Object.entries(tablas)) {
+        promesas.push(cargarCapa(vista, config.nombre, config.camposPopup, config.color))
+      }
+      await Promise.all(promesas)
+    }
+
+    function llenarSelectTablas() {
+      inputTable.innerHTML = '<option value="">seleccionar</option>'
+      Object.entries(tablas).forEach(([vista, config]) => {
+        const option = document.createElement('option')
+        option.value = vista
+        option.textContent = config.nombre
+        inputTable.appendChild(option)
+      })
+    }
+
+    function llenarSelectCampos(vista) {
+      inputField.innerHTML = ''
+      inputValue.innerHTML = ''
+      inputValue.disabled = true
+      btnSearch.disabled = true
+      if (!vista) return inputField.disabled = true
+      const campos = tablas[vista].camposFiltro
+      campos.forEach(campo => {
+        const option = document.createElement('option')
+        option.value = campo
+        option.textContent = campo
+        inputField.appendChild(option)
+      })
+      inputField.disabled = false
+    }
+
+    async function llenarSelectValores(vista, campo) {
+      inputValue.innerHTML = ''
+      btnSearch.disabled = true
+      try {
+        const { data } = await supabase.from(vista).select(campo).neq(campo, null).order(campo, { ascending: true })
+        const valoresUnicos = [...new Set(data.map(item => item[campo]))].sort()
+        valoresUnicos.forEach(val => {
+          const option = document.createElement('option')
+          option.value = val
+          option.textContent = val
+          inputValue.appendChild(option)
+        })
+        inputValue.disabled = false
+        btnSearch.disabled = false
+      } catch (error) {
+        console.error('Error cargando valores:', error)
+      }
+    }
+
+    function filtrarCapa(vista, campo, valor) {
+      const nombreCapa = tablas[vista].nombre
+      const geojsonOriginal = capasOriginales[nombreCapa]
+      const geojsonFiltrado = {
+        type: 'FeatureCollection',
+        features: geojsonOriginal.features.filter(f => f.properties[campo] == valor)
+      }
+      capas[nombreCapa].clearLayers()
+      capas[nombreCapa].addData(geojsonFiltrado)
+      Object.entries(capas).forEach(([nombre, layer]) => {
+        if (nombre === nombreCapa) map.addLayer(layer)
+        else map.removeLayer(layer)
+      })
+      mostrarListaResultados(nombreCapa, geojsonFiltrado.features)
+    }
+
+    function mostrarListaResultados(nombreCapa, features) {
+      resultList.innerHTML = ''
+      if (!features.length) {
+        resultsDiv.style.display = 'none'
+        return
+      }
+      resultsDiv.style.display = 'block'
+      features.forEach((feature, index) => {
+        const li = document.createElement('li')
+        const propiedades = feature.properties
+        const tablaKey = Object.keys(tablas).find(k => tablas[k].nombre === nombreCapa)
+        const textoExtra = tablas[tablaKey] ? tablas[tablaKey].camposPopup.map(c => propiedades[c]).find(Boolean) : null
+        li.textContent = `${nombreCapa}: ${textoExtra || propiedades.id || 'sin nombre'}`
+        
+        // Agregar funcionalidad de clic para señalar en el mapa
+        li.onclick = () => {
+          seleccionarFeatureEnMapa(feature)
+        }
+        resultList.appendChild(li)
+      })
+    }
+
+    function seleccionarFeatureEnMapa(feature) {
+      // Remover marcador anterior si existe
+      if (marcadorSeleccion) {
+        map.removeLayer(marcadorSeleccion)
+      }
+
+      // Obtener coordenadas del feature
+      let coordenadas
+      if (feature.geometry.type === 'Point') {
+        coordenadas = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]]
+      } else if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
+        // Para polígonos, usar el centroide
+        try {
+          const centroide = turf.centroid(feature)
+          coordenadas = [centroide.geometry.coordinates[1], centroide.geometry.coordinates[0]]
+        } catch (error) {
+          // Fallback: usar el primer punto de las coordenadas
+          const coords = feature.geometry.type === 'Polygon' 
+            ? feature.geometry.coordinates[0][0] 
+            : feature.geometry.coordinates[0][0][0]
+          coordenadas = [coords[1], coords[0]]
+        }
+      } else {
+        // Para otros tipos de geometría, intentar obtener el primer punto
+        const coords = feature.geometry.coordinates[0]
+        coordenadas = Array.isArray(coords[0]) ? [coords[0][1], coords[0][0]] : [coords[1], coords[0]]
+      }
+
+      // Crear marcador de selección (más grande y destacado)
+      marcadorSeleccion = L.circleMarker(coordenadas, {
+        radius: 12,
+        fillColor: 'yellow',
+        color: '#ff0000',
+        weight: 3,
+        opacity: 1,
+        fillOpacity: 0.8
+      }).addTo(map)
+
+      // Centrar el mapa en la ubicación
+      map.setView(coordenadas, 14)
+
+      // Mostrar popup con información
+      marcadorSeleccion.bindPopup(`<strong>Elemento seleccionado</strong><br/>${li.textContent}`).openPopup()
+    }
+
+    inputTable.onchange = () => { 
+      llenarSelectCampos(inputTable.value)
+      resultsDiv.style.display = 'none'
+      Object.values(capas).forEach(l => map.addLayer(l))
+      // Limpiar marcador de selección
+      if (marcadorSeleccion) {
+        map.removeLayer(marcadorSeleccion)
+        marcadorSeleccion = null
+      }
+    }
+    inputField.onchange = () => llenarSelectValores(inputTable.value, inputField.value)
+    btnSearch.onclick = () => filtrarCapa(inputTable.value, inputField.value, inputValue.value)
+    btnClear.onclick = () => { location.reload() }
+
+    // 🔍 Búsqueda por radio con clic + marcador rojo
+    let circuloBusqueda = null
+    let puntoMarcado = null
+
+    map.on('click', function(e) {
+      // Agregar marcador rojo en el punto clickeado
+      if (puntoMarcado) map.removeLayer(puntoMarcado)
+      puntoMarcado = L.circleMarker(e.latlng, {
+        radius: 8,
+        fillColor: 'red',
+        color: '#000',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.9
+      }).addTo(map)
+
+      L.popup().setLatLng(e.latlng).setContent(`
+        <strong>Buscar por radio:</strong><br/>
+        <button onclick="window.buscarRadio(${e.latlng.lat},${e.latlng.lng},5000)">5 km</button>
+        <button onclick="window.buscarRadio(${e.latlng.lat},${e.latlng.lng},10000)">10 km</button>
+        <button onclick="window.buscarRadio(${e.latlng.lat},${e.latlng.lng},30000)">30 km</button>
+      `).openOn(map)
+    })
+
+    window.buscarRadio = function(lat, lng, radio) {
+      map.closePopup()
+      if (circuloBusqueda) map.removeLayer(circuloBusqueda)
+      circuloBusqueda = L.circle([lat, lng], {
+        radius: radio, color: '#0000ff', fillColor: '#0000ff', fillOpacity: 0.2
+      }).addTo(map)
+
+      // Usar Turf.js para búsqueda geométrica más precisa
+      const centro = turf.point([lng, lat])
+      const buffer = turf.buffer(centro, radio / 1000, { units: 'kilometers' })
+
+      const resultados = []
+      resultList.innerHTML = ''
+      Object.entries(capasOriginales).forEach(([nombre, geojson]) => {
+        const dentro = geojson.features.filter(f => {
+          try {
+            return turf.booleanIntersects(buffer, f)
+          } catch (err) {
+            // Fallback al método original para puntos simples
+            if (f.geometry.type === 'Point') {
+              const dist = map.distance([lat, lng], [f.geometry.coordinates[1], f.geometry.coordinates[0]])
+              return dist <= radio
+            }
+            return false
+          }
+        })
+        if (dentro.length > 0) {
+          capas[nombre].clearLayers()
+          capas[nombre].addData({ type: 'FeatureCollection', features: dentro })
+          resultados.push({ nombre, features: dentro })
+        }
+      })
+
+      resultados.forEach(grupo => {
+        grupo.features.forEach(feature => {
+          const li = document.createElement('li')
+          const propiedades = feature.properties
+          const tablaKey = Object.keys(tablas).find(k => tablas[k].nombre === grupo.nombre)
+          const textoExtra = tablas[tablaKey] ? tablas[tablaKey].camposPopup.map(c => propiedades[c]).find(Boolean) : null
+          li.textContent = `${grupo.nombre}: ${textoExtra || propiedades.id || 'sin nombre'}`
+          
+          // Agregar funcionalidad de clic para señalar en el mapa
+          li.onclick = () => {
+            seleccionarFeatureEnMapa(feature)
+          }
+          resultList.appendChild(li)
+        })
+      })
+      resultsDiv.style.display = resultados.length > 0 ? 'block' : 'none'
+    }
+
+    // Variables para DataTables en el modal
+    const modalDatatables = {}
+    const modalTablas = [
+      { tabla: "c01_Cantones_2012_INEC_Z6_Cl", tieneProvCant: true },
+      { tabla: "c02_Parroquias_2012_INEC_Z6_", tieneProvCant: true },
+      { tabla: "Poblados_mst", tieneProvCant: false },
+      { tabla: "c01_Siniestros_2018_ECU911_Z", tieneProvCant: true },
+      { tabla: "c02_Riesgos_2018_ECU911_Z6_C", tieneProvCant: true },
+      { tabla: "Susceptibilidad_sequia_2015_25k_SNGR", tieneProvCant: false },
+      { tabla: "c03_Movimientos_masas_250K_2", tieneProvCant: false },
+      { tabla: "c04_Intensidad_sismica_250K_", tieneProvCant: false }
+    ]
+
+    // Funciones para la segunda página (modal) - EN CONTEXTO GLOBAL
+    window.abrirSegundaPagina = function() {
+      const modal = document.getElementById('modalOverlay')
+      modal.style.display = 'block'
+      
+      // Inicializar funcionalidad de tablas
+      setTimeout(() => {
+        crearModalSidebar()
+        cargarModalFiltros()
+      }, 100)
+      
+      // Efecto de fade-in
+      setTimeout(() => {
+        modal.style.opacity = '1'
+      }, 10)
+    }
+
+    window.cerrarSegundaPagina = function() {
+      const modal = document.getElementById('modalOverlay')
+      modal.style.display = 'none'
+      
+      // Limpiar DataTables al cerrar
+      Object.values(modalDatatables).forEach(dt => {
+        try { dt.destroy() } catch(e) {}
+      })
+      Object.keys(modalDatatables).forEach(key => delete modalDatatables[key])
+    }
+
+    function crearModalSidebar() {
+      const sidebar = document.getElementById('modalSidebar')
+      sidebar.innerHTML = ''
+      modalTablas.forEach((t, i) => {
+        const tab = document.createElement('div')
+        tab.classList.add('tab')
+        if (i === 0) tab.classList.add('active')
+        tab.textContent = t.tabla
+        tab.dataset.tab = t.tabla
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('#modalSidebar .tab').forEach(x => x.classList.remove('active'))
+          tab.classList.add('active')
+          cargarModalTabla(t.tabla, t.tieneProvCant)
+        })
+        sidebar.appendChild(tab)
+      })
+    }
+
+    async function cargarModalFiltros() {
+      const supabaseUrl = 'https://kaoxzvfdlykegcfhoohg.supabase.co'
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imthb3h6dmZkbHlrZWdjZmhvb2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5NTQ5MTEsImV4cCI6MjA2ODUzMDkxMX0.Y3MutpScHy3IyNSQev3u247Ec5l1hYTTmPRZqTZBY-k'
+      const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+
+      try {
+        const url = `${supabaseUrl}/rest/v1/c01_Cantones_2012_INEC_Z6_Cl?select=DPA_DESPRO,DPA_DESCAN&limit=5000`
+        const res = await fetch(url, { headers })
+        const datos = await res.json()
+
+        const provincias = [...new Set(datos.map(d => d.DPA_DESPRO))].sort()
+        const provinciaSelect = document.getElementById("modalProvincia")
+        provinciaSelect.innerHTML = '<option value="">Todas</option>'
+        provincias.forEach(p => {
+          const opt = document.createElement("option")
+          opt.value = p
+          opt.textContent = p
+          provinciaSelect.appendChild(opt)
+        })
+
+        provinciaSelect.addEventListener("change", () => {
+          const cantonSelect = document.getElementById("modalCanton")
+          cantonSelect.innerHTML = '<option value="">Todos</option>'
+          const seleccion = datos.filter(d => d.DPA_DESPRO === provinciaSelect.value)
+          ;[...new Set(seleccion.map(d => d.DPA_DESCAN))].sort().forEach(c => {
+            const opt = document.createElement("option")
+            opt.value = c
+            opt.textContent = c
+            cantonSelect.appendChild(opt)
+          })
+          const tabActivo = document.querySelector('#modalSidebar .tab.active')
+          if (tabActivo) {
+            const infoTabla = modalTablas.find(t => t.tabla === tabActivo.dataset.tab)
+            cargarModalTabla(infoTabla.tabla, infoTabla.tieneProvCant)
+          }
+        })
+
+        document.getElementById("modalCanton").addEventListener("change", () => {
+          const tabActivo = document.querySelector('#modalSidebar .tab.active')
+          if (tabActivo) {
+            const infoTabla = modalTablas.find(t => t.tabla === tabActivo.dataset.tab)
+            cargarModalTabla(infoTabla.tabla, infoTabla.tieneProvCant)
+          }
+        })
+
+        // Cargar la primera tabla por defecto
+        setTimeout(() => {
+          const infoTabla = modalTablas[0]
+          cargarModalTabla(infoTabla.tabla, infoTabla.tieneProvCant)
+        }, 200)
+      } catch (error) {
+        console.error('Error cargando filtros del modal:', error)
+      }
+    }
+
+    async function cargarModalTabla(nombreTabla, tieneProvCant) {
+      const supabaseUrl = 'https://kaoxzvfdlykegcfhoohg.supabase.co'
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imthb3h6dmZkbHlrZWdjZmhvb2hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5NTQ5MTEsImV4cCI6MjA2ODUzMDkxMX0.Y3MutpScHy3IyNSQev3u247Ec5l1hYTTmPRZqTZBY-k'
+      const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+
+      // Destruir DataTable anterior si existe
+      if (modalDatatables[nombreTabla]) {
+        modalDatatables[nombreTabla].destroy()
+        delete modalDatatables[nombreTabla]
+      }
+      
+      // Vaciar contenido
+      const cont = document.getElementById('modalTabContent')
+      cont.innerHTML = '<p>Cargando datos...</p>'
+
+      let filtro = ''
+      const prov = document.getElementById("modalProvincia").value
+      const cant = document.getElementById("modalCanton").value
+
+      if (tieneProvCant) {
+        if (prov) filtro += `DPA_DESPRO=eq.${encodeURIComponent(prov)}`
+        if (cant) filtro += (filtro ? "&" : "") + `DPA_DESCAN=eq.${encodeURIComponent(cant)}`
+      }
+
+      let url = `${supabaseUrl}/rest/v1/${nombreTabla}?select=*&limit=1000`
+      if (filtro) url = `${supabaseUrl}/rest/v1/${nombreTabla}?${filtro}&select=*&limit=1000`
+
+      try {
+        const res = await fetch(url, { headers })
+        const datos = await res.json()
+
+        if (!datos || datos.length === 0) {
+          cont.innerHTML = '<p>No hay datos para mostrar.</p>'
+          return
+        }
+
+        const columnas = Object.keys(datos[0])
+
+        // Crear nueva tabla desde cero
+        const tabla = document.createElement('table')
+        tabla.id = 'modal_tabla_actual'
+        tabla.classList.add('display')
+        cont.innerHTML = ''
+        cont.appendChild(tabla)
+
+        const colDefs = columnas.map(c => ({ title: c, data: c }))
+
+        modalDatatables[nombreTabla] = $('#modal_tabla_actual').DataTable({
+          data: datos,
+          columns: colDefs,
+          dom: 'Bfrtip',
+          buttons: [
+            'excelHtml5',
+            {
+              extend: 'pdfHtml5',
+              orientation: 'landscape',
+              pageSize: 'A4',
+              exportOptions: { columns: ':visible' },
+              customize: function (doc) {
+                doc.content[1].layout = {
+                  hLineWidth: () => 0.5,
+                  vLineWidth: () => 0.5,
+                  hLineColor: () => '#aaa',
+                  vLineColor: () => '#aaa',
+                  paddingLeft: () => 4,
+                  paddingRight: () => 4
+                }
+              }
+            }
+          ],
+          scrollX: true,
+          pageLength: 10,
+          language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
+          }
+        })
+      } catch (error) {
+        cont.innerHTML = '<p>Error cargando datos.</p>'
+        console.error('Error en cargarModalTabla:', error)
+      }
+    }
+
+    
+
+    // Cerrar modal al hacer clic fuera del contenido
+    document.getElementById('modalOverlay').onclick = function(e) {
+      if (e.target === this) {
+        window.cerrarSegundaPagina()
+      }
+    }
+
+    // Cerrar modal con tecla Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        window.cerrarSegundaPagina()
+      }
+    })
+
+    // Inicia
+    llenarSelectTablas()
+    cargarTodasLasCapas()
+  </script>
 </body>
 </html>
+
